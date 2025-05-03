@@ -1,4 +1,4 @@
-# voice-control-car
+# security-voice-control-car
 This is a very very simple project that uses a AI Image Reading model and a Voice Model to identify people and take voice controls from the user
 The idea is that it is almost like a security car, once it detects a person it will spin to try and "alert" the owner of the car, however due to some limitations with the car, it can only really send a message like that
 
@@ -26,4 +26,6 @@ You need to add the address of the car to the program and the port into the prog
 This link should hopefully help guide you into the specifics of your car and how to connect to it
 
 Once you connect to it this could should run if you just execute it with little changes needed to the Arduino IDE
+
+The program should run fine and after a bit of adjusting it should be able to pick up your voice and you can start giving it commands
 
