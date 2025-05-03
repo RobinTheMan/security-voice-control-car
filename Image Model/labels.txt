@@ -1,0 +1,5 @@
+0 Shoes
+1 Room
+2 Street
+3 Face
+4 Feet
