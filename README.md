@@ -2,6 +2,9 @@
 This is a very very simple project that uses a AI Image Reading model and a Voice Model to identify people and take voice controls from the user
 The idea is that it is almost like a security car, once it detects a person it will spin to try and "alert" the owner of the car, however due to some limitations with the car, it can only really send a message like that
 
+# This project was done in collaboration with
+[WilliamC1234](https://github.com/WilliamC1234) and [bbeltra](https://github.com/bbeltra)
+
 # Hardware Components
 You are gonna need one of these cars
 [Elegoo Smart Car v4](https://us.elegoo.com/products/elegoo-smart-robot-car-kit-v-4-0?srsltid=AfmBOoqPuPuBWAyRUrXPEGc86NutonWYCew_cnta1a6-40fRDaGKVDom)
