@@ -2,6 +2,7 @@ import threading
 import time
 import socket
 import json
+
 import cv2 as cv
 import numpy as np
 import pyaudio
@@ -9,30 +10,23 @@ from vosk import Model as VoskModel, KaldiRecognizer
 from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import DepthwiseConv2D
 
-#Robot Connection Setup
-HOST = ""#Insert IP
-PORT = ""#Insert port number (not as a string)
+#Smart Car setup
+HOST = #Insert Elegoo Smart Car IP (it's usually 192.168.4.1)
+PORT = #Insert the port (we did 100)
 
-#These are your commands
 commands = {
     "forward": b'{"H":0,"N":3,"D1":3,"D2":150}',
     "backward": b'{"H":0,"N":3,"D1":4,"D2":150}',
     "left": b'{"H":0,"N":3,"D1":1,"D2":100}',
     "right": b'{"H":0,"N":3,"D1":2,"D2":100}',
     "spin": b'{"H":0,"N":3,"D1":1,"D2":250}',
-    "stop_movement": b'{"H":0,"N":100}',
 }
 
-last_action_time = 0
-cooldown_seconds = 10
-action_in_progress = threading.Event()
-
-#This is how the commands are sent
-def send_command(command_bytes, delay=1.5):
+def send_command(command_bytes, delay=1.5): #This is what sends the commands to the car
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((HOST, PORT))
-            s.sendall(b"{Heartbeat}") #The heartbeat can be removed but when this was programmed it was difficult to remove so it's part of this one
+            s.sendall(b"{Heartbeat}") #"Heartbeat" is something with the car we have yet to understand but it is needed
             time.sleep(0.3)
             s.sendall(command_bytes)
             print(f"Sent: {command_bytes}")
@@ -46,10 +40,9 @@ def send_command(command_bytes, delay=1.5):
 def voice_control(running_event):
     print("Voice control started. Say 'forward', 'left', etc. Say 'stop' to quit.")
 
-    #Uses the vosk model for recognizing voice
-    model = VoskModel("vosk-model-small-en-us-0.15")
+    model = VoskModel("vosk-model-small-en-us-0.15") #This is the voice to text model we used
     recognizer = KaldiRecognizer(model, 16000)
-    mic = pyaudio.PyAudio()
+    mic = pyaudio.PyAudio() #Where we get the audio from, it will grab from your default microphone
     stream = mic.open(format=pyaudio.paInt16, channels=1,
                       rate=16000, input=True, frames_per_buffer=8192)
     stream.start_stream()
@@ -62,35 +55,26 @@ def voice_control(running_event):
             spoken = result["text"].lower()
             print(f"You said: {spoken}")
 
-            matched = False
 
-            if "forward" in spoken:
-                send_command(commands["forward"])
-                matched = True
-            elif "backward" in spoken:
-                send_command(commands["backward"])
-                matched = True
-            elif "left" in spoken:
-                send_command(commands["left"])
-                matched = True
-            elif "right" in spoken:
-                send_command(commands["right"])
-                matched = True
-            elif "spin" in spoken:
-                send_command(commands["spin"])
-                matched = True
-            elif "camera" in spoken:
+            if "camera" in spoken: #Activates the camera
                 print("Turning on camera!")
                 time.sleep(2)
-                camera_thread = threading.Thread(target=camera_detection, args=(running_event,))
+                camera_thread = threading.Thread(target=camera_detection, args=(running,))
                 camera_thread.start()
-                matched = True
-                print("Press 'q' to exit Camera Mode!" )
-            elif "exit" in spoken:
+                camera_thread.join()
+
+                
+            if "stop" in spoken: #Stops the program
                 print("Stop command received. Shutting down.")
-                send_command(commands["stop_movement"], delay=0.5)
-                running_event.clear()
-                matched = True
+                break
+                
+
+            matched = False
+            for cmd in commands:
+                if cmd in spoken and cmd != "stop_movement":
+                    send_command(commands[cmd], delay=1)
+                    matched = True
+                    break
 
             if not matched and spoken != "":
                 print("Command not recognized. Say 'forward', 'left', etc.")
@@ -100,32 +84,19 @@ def voice_control(running_event):
     mic.terminate()
 
 #Camera and Detection Thread
-class CustomDepthwiseConv2D(DepthwiseConv2D):
+class CustomDepthwiseConv2D(DepthwiseConv2D): #This helps detect the object, helps the camera know what it is looking at
     def __init__(self, *args, **kwargs):
         kwargs.pop("groups", None)
         super().__init__(*args, **kwargs)
 
-def perform_spin_action():
-    try:
-        send_command(commands["spin"])
-        print("Spinning...")
-        time.sleep(5)
-        send_command(commands["stop_movement"])
-        print("Done spinning. Resuming detection.")
-    finally:
-        action_in_progress.clear()
-
 def camera_detection(running_event):
     print("Camera stream and object detection started.")
 
-    model = load_model("Image Model/keras_model.h5", compile=False,
+    model = load_model("Image Model/keras_model.h5", compile=False, #The image model that is also provided on this page
                        custom_objects={"DepthwiseConv2D": CustomDepthwiseConv2D})
     class_names = open("Image Model/labels.txt", "r").readlines()
 
     cam = cv.VideoCapture('http://192.168.4.1:81/stream')
-    if not cam.isOpened():
-        print("[ERROR] Cannot open video stream")
-        return
 
     while running_event.is_set():
         ret, frame = cam.read()
@@ -142,28 +113,30 @@ def camera_detection(running_event):
         class_name = class_names[index]
         confidence_score = prediction[0][index]
 
-        if confidence_score >= 0.90 and not action_in_progress.is_set():
+#Prints out the class and confidence score
+
+        if confidence_score >= 0.90:
             detected_obj = class_name[2:].strip()
             if detected_obj in ["Shoes", "Feet", "Face"]:
-                print(f"Detected {detected_obj}!")
-                action_in_progress.set()
-                threading.Thread(target=perform_spin_action).start()
+                print(f"Detected {detected_obj}! Confidence: {confidence_score:.2f}")
+                send_command(commands["spin"], delay=2)
 
         cv.imshow('Camera', frame)
 
         if cv.waitKey(1) & 0xFF == ord('q'):
             print("'q' pressed. Closing camera.")
-            running_event.clear()
-            break
+            cam.release()
+            cv.destroyAllWindows()
 
-    cam.release()
-    cv.destroyAllWindows()
-
-# ------------------ Main Program ------------------
+#Main
 if __name__ == "__main__":
     running = threading.Event()
     running.set()
 
     voice_thread = threading.Thread(target=voice_control, args=(running,))
     voice_thread.start()
+    voice_thread.join()
+
+    print("Program ended.")
+
     voice_thread.join()
